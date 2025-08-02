@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Supabase + Google Maps</title>
+    <style>
+        #map {
+            width: 100%;
+            height: 100vh;
+        }
+
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 10px;
+            border: 1px solid #ccc;
+            z-index: 5;
+        }
+
+    </style>
+    <!-- Supabase JS 라이브러리 -->
+    <script src="https://unpkg.com/@supabase/supabase-js"></script>
+</head>
+<body>
+<div id="controls">
+</div>
+<div id="map"></div>
+
+<!-- Google Maps API -->
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAQ2GDnUz5EzJIWBBAPb_s8Zh6YITxFFqA&callback=initMap" async defer></script>
+
+<script>
+    const supabaseUrl = 'https://jrihebqeovpcugbkljnb.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpyaWhlYnFlb3ZwY3VnYmtsam5iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM3Nzk1NjgsImV4cCI6MjA2OTM1NTU2OH0.NvMXkqh1tuFWF5gcFxCIaDNRLfshfbnkhokgPA0OqdQ';
+    let supabaseClient;
+
+    async function initMap() {
+        // Supabase 초기화
+        supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+        // 지도 생성
+        const map = new google.maps.Map(document.getElementById("map"), {
+            center: { lat: 37.5665, lng: 126.9780 }, // 서울 중심
+            zoom: 14,
+        });
+
+        // Supabase에서 데이터 불러오기
+        const { data: restaurants, error } = await supabaseClient
+            .from('restaurants') // 테이블 이름 확인!
+            .select('name, lat, lng');
+
+        if (error) {
+            console.error("데이터 로드 오류:", error);
+            return;
+        }
+
+        console.log("불러온 데이터:", restaurants);
+
+        // 마커 표시
+        restaurants.forEach(r => {
+            new google.maps.Marker({
+                position: { lat: r.lat, lng: r.lng },
+                map: map,
+                title: r.name,
+            });
+        });
+    }
+
+    // Google Maps 콜백 등록
+    window.initMap = initMap;
+</script>
+</body>
+</html>
