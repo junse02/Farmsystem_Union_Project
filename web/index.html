@@ -19,82 +19,172 @@
             z-index: 5;
         }
     </style>
-    <script src="https://unpkg.com/@supabase/supabase-js"></script>
+<!--    <script src="https://unpkg.com/@supabase/supabase-js"></script>-->
 </head>
 <body>
-<div id="controls">
-    <span id="selectedName">선택된 식당: 없음</span>
+<<div id="controls">
+    <span id="selectedName">선택된 식당: 없음</span><br>
     <button id="highlightBtn" disabled>방문 표시</button>
+
+    <!-- ★ 별점 UI 추가 -->
+    <div id="rating" style="margin-top:6px; font-size:28px; cursor:pointer; user-select:none;">
+        <span data-score="1">☆</span><span data-score="2">☆</span><span data-score="3">☆</span>
+        <span data-score="4">☆</span><span data-score="5">☆</span>
+    </div>
+    <!-- ★ 로그아웃 버튼 -->
+    <button id="logoutBtn" style="margin-top:10px;background:#e11d48;color:#fff;border:none;
+                                padding:6px 12px;border-radius:6px;cursor:pointer">
+        로그아웃
+    </button>
 </div>
 <div id="map"></div>
+<!-- Google Maps API (Advanced Marker) -->
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAQ2GDnUz5EzJIWBBAPb_s8Zh6YITxFFqA&callback=initMap&libraries=marker&v=beta" async defer></script>
+<script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
-<!-- Google Maps API -->
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAQ2GDnUz5EzJIWBBAPb_s8Zh6YITxFFqA&callback=initMap&libraries=marker" async defer></script>
+    /* ── Supabase ───────────────────────────────── */
+    const supabase = createClient(
+        'https://jrihebqeovpcugbkljnb.supabase.co',
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpyaWhlYnFlb3ZwY3VnYmtsam5iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM3Nzk1NjgsImV4cCI6MjA2OTM1NTU2OH0.NvMXkqh1tuFWF5gcFxCIaDNRLfshfbnkhokgPA0OqdQ'
+    );
 
-<script>
-    const supabaseUrl = 'https://jrihebqeovpcugbkljnb.supabase.co';
-    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpyaWhlYnFlb3ZwY3VnYmtsam5iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM3Nzk1NjgsImV4cCI6MjA2OTM1NTU2OH0.NvMXkqh1tuFWF5gcFxCIaDNRLfshfbnkhokgPA0OqdQ';
+    const DEFAULT_CENTER = { lat: 37.5585, lng: 126.9997 };
+    const DEFAULT_ZOOM   = 16;
 
-    let supabaseClient;
-    let markers = [];
-    let selectedMarker = null;
+    /* ── 로그인 세션 ─────────────────────────────── */
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { location.href = 'login.html'; throw new Error('로그인 필요'); }
+    const userId = session.user.id;
 
-    function createMarkerSVG(color) {
-        return new DOMParser().parseFromString(`
-            <svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg">
-                <path d="M15 1C9 1 4 6 4 12c0 6.5 7 14 11 17 4-3 11-10.5 11-17 0-6-5-11-11-11z" fill="${color}" stroke="black" stroke-width="1"/>
-                <circle cx="15" cy="12" r="4" fill="white"/>
-            </svg>
-        `, "image/svg+xml").documentElement;
-    }
+    /* ── Google Maps 콜백 ───────────────────────── */
+    window.initMap = async () => {
+        /* 1) 공용 식당 + 내 별점(★) 데이터 */
+        const { data: restaurants } = await supabase
+            .from('restaurants')
+            .select('id, name, lat, lng');
 
-    async function initMap() {
-        supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+        const { data: ratings } = await supabase
+            .from('ratings')
+            .select('restaurant_id, stars')
+            .not('stars', 'is', null);          // 저장된 별점만
 
-        const map = new google.maps.Map(document.getElementById("map"), {
-            center: { lat: 37.5585, lng: 126.9997 }, // 동국대학교 서울캠퍼스
-            zoom: 16, // 캠퍼스 내 상세 보기 적정 줌
-            mapId: "DEMO_MAP_ID"
+        const starsMap   = new Map(ratings?.map(r => [r.restaurant_id, r.stars]));
+        const visitedSet = new Set(starsMap.keys());
+
+        /* 2) 지도 */
+        const map = new google.maps.Map(document.getElementById('map'), {
+            center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM, mapId: 'DEMO_MAP_ID'
         });
 
-        const { data: restaurants, error } = await supabaseClient
-            .from('restaurants')
-            .select('name, lat, lng');
+        /* 3) 마커 */
+        const markers = {};
+        restaurants.forEach(r => {
+            const marker = new google.maps.marker.AdvancedMarkerElement({
+                position: { lat: +r.lat, lng: +r.lng },
+                map,
+                title: r.name,
+                content: createMarkerSVG(visitedSet.has(r.id) ? 'red' : 'grey')
+            });
+            markers[r.id] = marker;
+            marker.addListener('click', () => handleSelect(r));
+        });
 
-        if (error) {
-            console.error("데이터 로드 오류:", error);
-            return;
+        /* ── 상태 변수 ─────────────────────────────── */
+        let current = null;          // 선택된 식당 객체
+        let pendingScore = 0;        // 화면에서 선택한(아직 저장 전) 별점
+
+        /* 4) 마커 클릭 시 */
+        function handleSelect(place) {
+            current = place;
+            pendingScore = starsMap.get(place.id) ?? 0;   // 이미 저장된 값 또는 0
+            document.getElementById('selectedName').innerText =
+                `선택된 식당: ${place.name}`;
+            updateVisitBtnState();
+            highlightStars(pendingScore);
         }
 
-        console.log("불러온 데이터:", restaurants);
-
-        restaurants.forEach(r => {
-            if (r.lat && r.lng) {
-                const marker = new google.maps.marker.AdvancedMarkerElement({
-                    position: { lat: Number(r.lat), lng: Number(r.lng) },
-                    map,
-                    title: r.name,
-                    content: createMarkerSVG("grey")
-                });
-
-                marker.addListener("click", () => {
-                    selectedMarker = { name: r.name, marker };
-                    document.getElementById("selectedName").innerText = `선택된 식당: ${r.name}`;
-                    document.getElementById("highlightBtn").disabled = false;
-                });
-
-                markers.push({ name: r.name, marker });
-            }
+        /* 5) ★ 클릭 → pendingScore만 변경 */
+        document.querySelectorAll('#rating span').forEach(el => {
+            el.addEventListener('click', () => {
+                if (!current) return;
+                pendingScore = +el.dataset.score;           // 1-5
+                highlightStars(pendingScore);
+                updateVisitBtnState();                      // 버튼 활성화
+            });
         });
 
-        document.getElementById("highlightBtn").addEventListener("click", () => {
-            if (selectedMarker) {
-                selectedMarker.marker.content = createMarkerSVG("red");
-            }
-        });
+        /* 6) 방문 표시 버튼 */
+        document.getElementById('highlightBtn')
+            .addEventListener('click', async () => {
+                if (!current) return;
+
+                const isVisited = visitedSet.has(current.id);
+
+                if (!isVisited) {
+                    /* ① 최초 저장: 별점이 선택돼 있어야 함 */
+                    if (pendingScore === 0) {
+                        alert('별점을 먼저 선택해 주세요!');
+                        return;
+                    }
+                    await supabase.from('ratings').upsert({
+                        user_id: userId,
+                        restaurant_id: current.id,
+                        stars: pendingScore
+                    });
+
+                    starsMap.set(current.id, pendingScore);
+                    visitedSet.add(current.id);
+                    markers[current.id].content = createMarkerSVG('red');
+                    updateVisitBtnState();
+                } else {
+                    /* ② 이미 방문 ⇒ 삭제(취소) */
+                    await supabase.from('ratings')
+                        .delete()
+                        .eq('restaurant_id', current.id);
+                    starsMap.delete(current.id);
+                    visitedSet.delete(current.id);
+                    pendingScore = 0;
+                    highlightStars(0);
+                    markers[current.id].content = createMarkerSVG('grey');
+                    updateVisitBtnState();
+                }
+            });
+
+        /* ── UI 헬퍼 ──────────────────────────────── */
+        function updateVisitBtnState() {
+            // 저장 전: 방문 X   /   저장 후: 방문 O
+            const isVisited = visitedSet.has(current?.id);
+            const btn = document.getElementById('highlightBtn');
+            btn.textContent = isVisited ? '방문 취소' : '방문 표시';
+            btn.disabled = !isVisited && pendingScore === 0;
+        }
+
+        function highlightStars(score) {
+            document.querySelectorAll('#rating span')
+                .forEach(el => el.textContent = +el.dataset.score <= score ? '★' : '☆');
+        }
+    };
+
+    /* ── SVG ───────────────────────────────────── */
+    function createMarkerSVG(fill) {
+        return new DOMParser().parseFromString(
+            `<svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg">
+         <path d="M15 1C9 1 4 6 4 12c0 6.5 7 14 11 17 4-3 11-10.5 11-17 0-6-5-11-11-11z"
+               fill="${fill}" stroke="black" stroke-width="1"/>
+         <circle cx="15" cy="12" r="4" fill="white"/>
+       </svg>`, 'image/svg+xml'
+        ).documentElement;
     }
 
-    window.initMap = initMap;
+    /* ── 로그아웃 ─────────────────────────────────── */
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+        await supabase.auth.signOut();   // 세션 삭제
+        location.href = 'login.html';    // 로그인 화면으로
+    });
 </script>
+
+
+
 </body>
 </html>
