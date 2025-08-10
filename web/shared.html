@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <title>공유된 맛집 지도</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+        #map{height:100%}
+        #topbar{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:5;background:#fff;padding:10px 14px;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.08);display:flex;gap:10px;align-items:center}
+        #title{font-weight:600}
+        #legend{font-size:.9rem;color:#6b7280}
+        #error{position:absolute;top:20px;left:20px;right:20px;z-index:6;color:#b91c1c;background:#fee2e2;border:1px solid #fecaca;border-radius:10px;padding:10px;display:none}
+    </style>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAQ2GDnUz5EzJIWBBAPb_s8Zh6YITxFFqA&callback=initMap&libraries=marker&v=beta" async defer></script>
+</head>
+<body>
+<div id="error"></div>
+<div id="topbar">
+    <span id="title">맛집 지도</span>
+    <span id="legend">별점: ★1~5</span>
+</div>
+<div id="map"></div>
+
+<script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+    // === 0) Supabase 설정 (index.html과 동일 값 사용) ===
+    const supabase = createClient(
+        'https://jrihebqeovpcugbkljnb.supabase.co',
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpyaWhlYnFlb3ZwY3VnYmtsam5iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM3Nzk1NjgsImV4cCI6MjA2OTM1NTU2OH0.NvMXkqh1tuFWF5gcFxCIaDNRLfshfbnkhokgPA0OqdQ'
+    );
+
+    const DEFAULT_CENTER = { lat: 37.5585, lng: 126.9997 };
+    const DEFAULT_ZOOM   = 14;
+
+    // === 1) URL 파라미터에서 token 추출 ===
+    const params = new URLSearchParams(location.search);
+    const token = params.get('token');
+    if (!token) {
+        showError('유효하지 않은 링크입니다. (token 누락)');
+    }
+
+    // === 2) 공유 정보 조회: shares(token → user_id, display_name) ===
+    async function fetchShareInfo() {
+        const { data, error } = await supabase
+            .from('shares')
+            .select('user_id, display_name')
+            .eq('token', token)
+            .single();
+        if (error || !data) throw new Error('공유 토큰이 유효하지 않습니다.');
+        return data;
+    }
+
+    // === 3) 사용자 별점(방문) & 식당 좌표 불러오기 ===
+    async function fetchUserRatingsAndRestaurants(userId) {
+        const [{ data: ratings, error: rErr }, { data: restaurants, error: sErr }] = await Promise.all([
+            supabase.from('ratings').select('restaurant_id, stars').eq('user_id', userId).not('stars','is',null),
+            supabase.from('restaurants').select('id, name, lat, lng')
+        ]);
+        if (rErr || sErr) throw new Error('데이터 로드 중 오류가 발생했습니다.');
+        return { ratings: ratings||[], restaurants: restaurants||[] };
+    }
+
+    // === 4) 지도 초기화 콜백 ===
+    window.initMap = async () => {
+        try {
+            const share = await fetchShareInfo();
+            document.getElementById('title').textContent = `${share.display_name||'사용자'}의 맛집 지도`;
+
+            const map = new google.maps.Map(document.getElementById('map'), {
+                center: DEFAULT_CENTER,
+                zoom: DEFAULT_ZOOM,
+                mapId: 'DEMO_MAP_ID'
+            });
+
+            const { ratings, restaurants } = await fetchUserRatingsAndRestaurants(share.user_id);
+            const starMap = new Map(ratings.map(r => [r.restaurant_id, r.stars]));
+
+            // 선택: 해당 사용자가 별점을 준 식당만 표시
+            const targets = restaurants.filter(r => starMap.has(r.id));
+            if (targets.length === 0) {
+                showError('공유된 맛집이 아직 없어요.');
+            }
+
+            const bounds = new google.maps.LatLngBounds();
+            targets.forEach(r => {
+                const stars = starMap.get(r.id) || 0;
+                const marker = new google.maps.marker.AdvancedMarkerElement({
+                    position: { lat: +r.lat, lng: +r.lng },
+                    map,
+                    title: `${r.name} – ${'★'.repeat(stars)}`,
+                    content: createMarkerSVG(colorByStars(stars))
+                });
+                bounds.extend(marker.position);
+                // 간단한 인포팝업
+                marker.addListener('click', () => {
+                    new google.maps.InfoWindow({ content: `<div style="min-width:160px"><b>${r.name}</b><br/>별점: ${'★'.repeat(stars)}</div>` }).open({ map, anchor: marker });
+                });
+            });
+            if (!bounds.isEmpty()) map.fitBounds(bounds);
+        } catch (e) {
+            showError(e.message||'오류가 발생했습니다.');
+        }
+    };
+
+    // === 5) Marker SVG / 색상 유틸 ===
+    function createMarkerSVG(fill) {
+        return new DOMParser().parseFromString(
+            `<svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg">
+         <path d="M15 1C9 1 4 6 4 12c0 6.5 7 14 11 17 4-3 11-10.5 11-17 0-6-5-11-11-11z" fill="${fill}" stroke="black" stroke-width="1"/>
+         <circle cx="15" cy="12" r="4" fill="white"/>
+       </svg>`, 'image/svg+xml'
+        ).documentElement;
+    }
+    function colorByStars(s) {
+        // 0=회색, 1=토마토, 3=주황, 5=레드-핑크 그라데이션 느낌
+        if (s>=5) return '#ef4444'; // red-500
+        if (s>=4) return '#f97316'; // orange-500
+        if (s>=3) return '#f59e0b'; // amber-500
+        if (s>=2) return '#84cc16'; // lime-500
+        if (s>=1) return '#22c55e'; // green-500
+        return '#9ca3af'; // gray-400
+    }
+
+    // === 6) 오류 표시 ===
+    function showError(msg){
+        const el = document.getElementById('error');
+        el.textContent = msg;
+        el.style.display = 'block';
+    }
+</script>
+</body>
+</html>
