@@ -1,0 +1,14 @@
+/* ===== Orange Top Bar ===== */
+.topbar{
+  position: fixed; top: 0; left: 0; right: 0; z-index: 25;
+  background: var(--orange); color: #fff; box-shadow: var(--shadow); padding: 12px 16px;
+}
+.topbar .brand{ font-weight: 800; }
+
+/* 페이지 공통 여백 (상단바/하단바 고려) */
+.page{
+  padding-top: 72px;   /* topbar 높이 보정 */
+  padding-bottom: 80px;/* bottom-nav 높이 보정 */
+}
+
+.section-title{ margin: 8px 0 12px; font-size: 1.1rem; font-weight: 800; }

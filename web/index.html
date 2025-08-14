@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>식동락 – 메인</title>
+  <style>
+    html, body { height: 100%; margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+    #map { width: 100%; height: calc(100vh - 136px); } /* 헤더+검색바 높이 제외 */
+    header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:#ff6b00; color:#fff; }
+    .brand { display:flex; align-items:center; gap:10px; font-weight:800; }
+    .actions { display:flex; gap:8px; align-items:center; }
+    .btn { padding:8px 12px; border-radius:8px; border:1px solid rgba(255,255,255,.3); background:#fff; color:#ff6b00; font-weight:700; cursor:pointer; }
+    .btn.ghost { background:transparent; color:#fff; border-color:rgba(255,255,255,.45); }
+    .searchbar { display:flex; gap:8px; padding:10px 16px; background:#fff5ec; border-bottom:1px solid #ffd9bf; }
+    .searchbar input { flex:1; padding:10px 12px; border:1px solid #ffbf91; border-radius:10px; font-size:14px; }
+    .searchbar button { padding:10px 14px; border-radius:10px; border:1px solid #ff8c3b; background:#ff8c3b; color:#fff; cursor:pointer; font-weight:700; }
+    .suggests { position:relative; }
+    .suggests-list { position:absolute; left:16px; right:16px; top:54px; background:#fff; border:1px solid #eee; border-radius:10px; max-height:240px; overflow:auto; box-shadow:0 6px 18px rgba(0,0,0,.08); }
+    .suggest { width:100%; text-align:left; padding:10px 12px; background:#fff; border:none; border-bottom:1px solid #f3f3f3; cursor:pointer; }
+    .suggest:hover { background:#fff7ee; }
+    #controls { position: absolute; top: 148px; left: 12px; background: #fff; padding: 10px; border: 1px solid #ccc; z-index: 5;
+                border-radius: 10px; box-shadow: 0 6px 16px rgba(0,0,0,.1); }
+    #rating { margin-top:6px; font-size:28px; cursor:pointer; user-select:none; }
+    #rating span { padding:0 2px; }
+    #highlightBtn { margin-top:6px; background:#ffeddc; color:#ff6b00; border:1px solid #ff6b00; padding:6px 12px; border-radius:8px; cursor:pointer }
+    #highlightBtn[disabled]{ opacity:.55; cursor:default }
+    #logoutBtn { margin-top:8px; background:#e11d48; color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer }
+  </style>
+  <!-- JS 경로 수정: web → sc/js  (상대경로: ../sc/js/...) -->
+  <script type="module" src="../sc/js/app.js"></script>
+  <!-- Google Maps (키 교체 필수) -->
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAQ2GDnUz5EzJIWBBAPb_s8Zh6YITxFFqA&callback=initMap&libraries=marker&v=beta" defer></script>
+
+</head>
+<body>
+<header>
+  <div class="brand">🍽️ 식동락</div>
+  <div class="actions">
+    <a class="btn ghost" href="board.html">게시판</a>
+    <button class="btn" id="shareBtn">공유</button>
+  </div>
+</header>
+
+<div class="searchbar">
+  <input id="q" placeholder="장소 검색" />
+  <button id="searchBtn">검색</button>
+</div>
+<div class="suggests" id="suggests" style="display:none">
+  <div class="suggests-list" id="suggestList"></div>
+</div>
+
+<div id="controls">
+  <span id="selectedName">선택된 식당: 없음</span><br>
+  <button id="highlightBtn" disabled>방문 표시</button>
+  <div id="rating"><span data-score="1">☆</span><span data-score="2">☆</span><span data-score="3">☆</span><span data-score="4">☆</span><span data-score="5">☆</span></div>
+  <button id="logoutBtn">로그아웃</button>
+</div>
+
+<div id="map"></div>
+</body>
+<nav style="position:fixed; bottom:0; left:0; width:100%; height:60px; background:#fff; border-top:1px solid #ffd9bf; display:flex; justify-content:space-around; align-items:center; z-index:10;">
+    <a href="index.html" style="flex:1; text-align:center; color:#ff6b00; text-decoration:none; font-size:13px; display:flex; flex-direction:column; align-items:center; gap:2px;">
+        <span style="font-size:22px;">🗺️</span>
+        지도
+    </a>
+    <a href="ranking.html" style="flex:1; text-align:center; color:#ff6b00; text-decoration:none; font-size:13px; display:flex; flex-direction:column; align-items:center; gap:2px;">
+        <span style="font-size:22px;">🏆</span>
+        랭킹
+    </a>
+    <a href="board.html" style="flex:1; text-align:center; color:#ff6b00; text-decoration:none; font-size:13px; display:flex; flex-direction:column; align-items:center; gap:2px;">
+        <span style="font-size:22px;">💬</span>
+        공유게시판
+    </a>
+    <a href="mypage.html" style="flex:1; text-align:center; color:#ff6b00; text-decoration:none; font-size:13px; display:flex; flex-direction:column; align-items:center; gap:2px;">
+        <span style="font-size:22px;">👤</span>
+        마이페이지
+    </a>
+</nav>
+</html>
